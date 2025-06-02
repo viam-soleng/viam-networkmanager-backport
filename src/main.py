@@ -8,12 +8,5 @@ except ModuleNotFoundError:
     from .models.installer import Installer
 
 
-async def main():
-    """Main function to run the NetworkManager backport module."""
-    module = Module.from_args()
-    module.add_model_from_registry(Installer.MODEL, Installer)
-    await module.start()
-
-
 if __name__ == '__main__':
-    asyncio.run(main())
+    asyncio.run(Module.run_from_registry())
