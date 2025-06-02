@@ -139,7 +139,7 @@ class Installer(Generic, EasyResource):
         if not all([self._backport_url, self._target_version, self._archive_name, 
                    self._work_dir, self._platform, self._description]):
             self._configured = False
-            LOGGER.error("Module not properly configured - missing required attributes")
+            LOGGER.error(f"Module {self.name} not properly configured - missing required attributes")
             LOGGER.error("Required: backport_url, target_version, archive_name, work_dir, platform, description")
             return
         
@@ -293,7 +293,7 @@ class Installer(Generic, EasyResource):
             
             if install_result.returncode != 0:
                 # Try to fix broken dependencies
-                LOGGER.warning("dpkg install failed, attempting to fix dependencies...")
+                LOGGER.warning(f"dpkg install failed for {self.name}, attempting to fix dependencies")
                 fix_result = await self._run_command(["sudo", "apt-get", "install", "-f", "-y"])
                 if fix_result.returncode != 0:
                     raise Exception(f"Failed to install packages: {install_result.stderr}")
@@ -305,7 +305,7 @@ class Installer(Generic, EasyResource):
             ])
             
             if restart_result.returncode != 0:
-                LOGGER.warning(f"Failed to restart NetworkManager: {restart_result.stderr}")
+                LOGGER.warning(f"Failed to restart NetworkManager for {self.name}: {restart_result.stderr}")
             
             # Cleanup if requested
             if self._cleanup_after_install:
@@ -323,7 +323,7 @@ class Installer(Generic, EasyResource):
             }
             
         except Exception as e:
-            LOGGER.error(f"Error installing backport: {e}")
+            LOGGER.error(f"Error installing backport for {self.name}: {e}")
             return {
                 "success": False,
                 "error": str(e),
@@ -377,7 +377,7 @@ class Installer(Generic, EasyResource):
             
             # Auto-install if configured and needed
             if should_auto_install:
-                LOGGER.info("Auto-installing NetworkManager backport...")
+                LOGGER.info(f"Auto-installing NetworkManager backport for {self.name}")
                 install_result = await self._install_backport()
                 health_status["auto_install_result"] = install_result
             
@@ -536,14 +536,14 @@ class Installer(Generic, EasyResource):
             # Calculate SHA256 checksum
             result = await self._run_command(["sha256sum", str(file_path)])
             if result.returncode != 0:
-                LOGGER.error(f"Failed to calculate checksum: {result.stderr}")
+                LOGGER.error(f"Failed to calculate checksum for {self.name}: {result.stderr}")
                 return False
             
             calculated_checksum = result.stdout.split()[0]
             return calculated_checksum.lower() == self._expected_checksum.lower()
             
         except Exception as e:
-            LOGGER.error(f"Checksum verification failed: {e}")
+            LOGGER.error(f"Checksum verification failed for {self.name}: {e}")
             return False
 
     async def _run_command(self, cmd: List[str], cwd: Optional[str] = None) -> subprocess.CompletedProcess:
