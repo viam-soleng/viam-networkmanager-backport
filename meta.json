@@ -1,0 +1,19 @@
+{
+  "$schema": "https://dl.viam.dev/module.schema.json",
+  "module_id": "hunter:networkmanager-backport",
+  "visibility": "public",
+  "url": "https://github.com/hunter/networkmanager-backport",
+  "description": "Generic NetworkManager backport installer for fleet management across different platforms and versions",
+  "models": [
+    {
+      "api": "rdk:component:generic",
+      "model": "hunter:networkmanager-backport:installer",
+      "short_description": "Generic NetworkManager backport installer supporting any version/platform",
+      "markdown_link": "README.md#model-hunternetworkmanager-backportinstaller"
+    }
+  ],
+  "applications": null,
+  "markdown_link": "README.md",
+  "entrypoint": "./run.sh",
+  "first_run": ""
+}
