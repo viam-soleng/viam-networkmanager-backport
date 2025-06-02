@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-"""
-NetworkManager Backport Installer
-
-A generic Viam component for installing NetworkManager backports across different
-platforms and versions. Supports fleet management and automated deployment.
-"""
-
 import asyncio
 import hashlib
 import logging
@@ -42,37 +34,28 @@ class Installer(Generic, EasyResource):
         "installer"
     )
     
-    # Default configuration for the original GOST Jammy backport
-    DEFAULT_CONFIG = {
-        "backport_url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar",
-        "target_version": "1.42.8",
-        "archive_name": "jammy-nm-backports.tar",
-        "work_dir": "nm-backports-install",
-        "platform": "ubuntu-22.04",
-        "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy)"
-    }
-
     def __init__(self, name: str):
         super().__init__(name)
         
-        # Configuration attributes (will be set via reconfigure)
-        self._backport_url = self.DEFAULT_CONFIG["backport_url"]
-        self._target_version = self.DEFAULT_CONFIG["target_version"]
-        self._archive_name = self.DEFAULT_CONFIG["archive_name"]
-        self._work_dir = self.DEFAULT_CONFIG["work_dir"]
-        self._platform = self.DEFAULT_CONFIG["platform"]
-        self._description = self.DEFAULT_CONFIG["description"]
+        # Configuration attributes (MUST be set via reconfigure - no defaults)
+        self._backport_url = None
+        self._target_version = None
+        self._archive_name = None
+        self._work_dir = None
+        self._platform = None
+        self._description = None
         
-        # Behavioral configuration
-        self._auto_install = True
-        self._check_interval = 3600  # Check every hour by default
+        # Behavioral configuration with safe defaults
+        self._auto_install = False  # Safe default: require manual installation
+        self._check_interval = 3600
         self._force_reinstall = False
         self._cleanup_after_install = True
         self._verify_checksum = False
         self._expected_checksum = None
         
-        # Computed paths (updated when config changes)
-        self._backup_dir = Path.home() / self._work_dir
+        # Computed paths (will be set after reconfigure)
+        self._backup_dir = None
+        self._configured = False  # Track if properly configured
 
     @classmethod
     def new(
@@ -91,26 +74,33 @@ class Installer(Generic, EasyResource):
         # Convert config attributes to dict for easier access
         attrs = struct_to_dict(config.attributes) if config.attributes else {}
         
-        # Validate required backport configuration
-        backport_url = attrs.get("backport_url", cls.DEFAULT_CONFIG["backport_url"])
-        if not isinstance(backport_url, str) or not backport_url.startswith(("http://", "https://")):
-            raise ValueError("backport_url must be a valid HTTP/HTTPS URL")
+        # REQUIRED: Validate all essential backport configuration
+        backport_url = attrs.get("backport_url")
+        if not backport_url or not isinstance(backport_url, str) or not backport_url.startswith(("http://", "https://")):
+            raise ValueError("backport_url is required and must be a valid HTTP/HTTPS URL")
             
-        target_version = attrs.get("target_version", cls.DEFAULT_CONFIG["target_version"])
-        if not isinstance(target_version, str) or not target_version.strip():
-            raise ValueError("target_version must be a non-empty string")
+        target_version = attrs.get("target_version")
+        if not target_version or not isinstance(target_version, str) or not target_version.strip():
+            raise ValueError("target_version is required and must be a non-empty string")
             
-        # Validate optional configuration
-        archive_name = attrs.get("archive_name", cls.DEFAULT_CONFIG["archive_name"])
-        if not isinstance(archive_name, str) or not archive_name.strip():
-            raise ValueError("archive_name must be a non-empty string")
+        archive_name = attrs.get("archive_name")
+        if not archive_name or not isinstance(archive_name, str) or not archive_name.strip():
+            raise ValueError("archive_name is required and must be a non-empty string")
             
-        work_dir = attrs.get("work_dir", cls.DEFAULT_CONFIG["work_dir"])
-        if not isinstance(work_dir, str) or not work_dir.strip():
-            raise ValueError("work_dir must be a non-empty string")
+        work_dir = attrs.get("work_dir")
+        if not work_dir or not isinstance(work_dir, str) or not work_dir.strip():
+            raise ValueError("work_dir is required and must be a non-empty string")
+            
+        platform = attrs.get("platform")
+        if not platform or not isinstance(platform, str) or not platform.strip():
+            raise ValueError("platform is required and must be a non-empty string")
+        
+        description = attrs.get("description")
+        if not description or not isinstance(description, str) or not description.strip():
+            raise ValueError("description is required and must be a non-empty string")
             
         # Validate behavioral parameters
-        auto_install = attrs.get("auto_install", True)
+        auto_install = attrs.get("auto_install", False)
         if not isinstance(auto_install, bool):
             raise ValueError("auto_install must be a boolean")
             
@@ -140,16 +130,24 @@ class Installer(Generic, EasyResource):
         """Reconfigure the component with new settings."""
         attrs = struct_to_dict(config.attributes) if config.attributes else {}
         
-        # Update backport configuration
-        self._backport_url = attrs.get("backport_url", self.DEFAULT_CONFIG["backport_url"])
-        self._target_version = attrs.get("target_version", self.DEFAULT_CONFIG["target_version"])
-        self._archive_name = attrs.get("archive_name", self.DEFAULT_CONFIG["archive_name"])
-        self._work_dir = attrs.get("work_dir", self.DEFAULT_CONFIG["work_dir"])
-        self._platform = attrs.get("platform", self.DEFAULT_CONFIG["platform"])
-        self._description = attrs.get("description", self.DEFAULT_CONFIG["description"])
+        # Update REQUIRED backport configuration (no defaults)
+        self._backport_url = attrs.get("backport_url")
+        self._target_version = attrs.get("target_version")
+        self._archive_name = attrs.get("archive_name")
+        self._work_dir = attrs.get("work_dir")
+        self._platform = attrs.get("platform")
+        self._description = attrs.get("description")
         
-        # Update behavioral configuration
-        self._auto_install = attrs.get("auto_install", True)
+        # Validate all required fields are present
+        if not all([self._backport_url, self._target_version, self._archive_name, 
+                   self._work_dir, self._platform, self._description]):
+            self._configured = False
+            self.logger.error("Module not properly configured - missing required attributes")
+            self.logger.error("Required: backport_url, target_version, archive_name, work_dir, platform, description")
+            return
+        
+        # Update behavioral configuration with safe defaults
+        self._auto_install = attrs.get("auto_install", False)  # Default to manual
         self._check_interval = attrs.get("check_interval", 3600)
         self._force_reinstall = attrs.get("force_reinstall", False)
         self._cleanup_after_install = attrs.get("cleanup_after_install", True)
@@ -158,10 +156,13 @@ class Installer(Generic, EasyResource):
         
         # Update computed paths
         self._backup_dir = Path.home() / self._work_dir
+        self._configured = True
         
-        self.logger.info(f"Reconfigured {self.name} for {self._description}")
+        self.logger.info(f"Successfully configured {self.name}")
+        self.logger.info(f"Description: {self._description}")
         self.logger.info(f"Target: {self._target_version} from {self._backport_url}")
         self.logger.info(f"Auto-install: {self._auto_install}, Force: {self._force_reinstall}")
+        self.logger.info(f"Working directory: {self._backup_dir}")
 
     async def do_command(
         self,
@@ -413,7 +414,26 @@ class Installer(Generic, EasyResource):
 
     def _get_current_config(self) -> Dict[str, Any]:
         """Get the current module configuration."""
+        if not self._configured:
+            return {
+                "configured": False,
+                "error": "Module not properly configured",
+                "required_attributes": [
+                    "backport_url", "target_version", "archive_name", 
+                    "work_dir", "platform", "description"
+                ],
+                "example_config": {
+                    "backport_url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar",
+                    "target_version": "1.42.8",
+                    "archive_name": "jammy-nm-backports.tar",
+                    "work_dir": "nm-backports-install",
+                    "platform": "ubuntu-22.04",
+                    "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy)"
+                }
+            }
+        
         return {
+            "configured": True,
             "backport_url": self._backport_url,
             "target_version": self._target_version,
             "archive_name": self._archive_name,
@@ -425,7 +445,7 @@ class Installer(Generic, EasyResource):
             "force_reinstall": self._force_reinstall,
             "cleanup_after_install": self._cleanup_after_install,
             "verify_checksum": self._verify_checksum,
-            "backup_dir": str(self._backup_dir)
+            "backup_dir": str(self._backup_dir) if self._backup_dir else None
         }
 
     async def _list_available_backports(self) -> Dict[str, Any]:
@@ -433,19 +453,25 @@ class Installer(Generic, EasyResource):
         # This is a placeholder for future functionality
         # Could query a registry or known locations for available backports
         return {
-            "available_backports": [
+            "note": "This is a generic installer - configure with your specific backport details",
+            "example_configurations": [
                 {
-                    "version": "1.42.8",
-                    "platform": "ubuntu-22.04",
-                    "url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar",
-                    "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy)",
-                    "features": ["scanning-in-ap-mode"]
+                    "name": "GOST Jammy NetworkManager 1.42.8",
+                    "config": {
+                        "backport_url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar",
+                        "target_version": "1.42.8",
+                        "archive_name": "jammy-nm-backports.tar",
+                        "work_dir": "jammy-nm-backports",
+                        "platform": "ubuntu-22.04",
+                        "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy) - enables scanning-in-ap-mode"
+                    }
                 }
                 # Future: could dynamically discover more backports
             ],
             "current_config": {
-                "target_version": self._target_version,
-                "platform": self._platform
+                "configured": self._configured,
+                "target_version": self._target_version if self._configured else None,
+                "platform": self._platform if self._configured else None
             }
         }
 
