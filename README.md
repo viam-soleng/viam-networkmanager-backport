@@ -1,6 +1,6 @@
 # NetworkManager Backport Module
 
-A generic Viam module for installing NetworkManager backports across different platforms and versions. This module enables fleet management of NetworkManager updates, with the first use case being the NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy) GOST devices that enables scanning-in-ap-mode functionality.
+A generic Viam module for installing NetworkManager backports across different platforms and versions. This module enables fleet management of NetworkManager updates, with the first use case being the NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy) GOST devices that enables scanning-in-AP-mode functionality.
 
 ## Features
 
