@@ -1,6 +1,6 @@
 # NetworkManager Backport Module
 
-A generic Viam module for installing NetworkManager backports across different platforms and versions. This module enables fleet management of NetworkManager updates, with the first use case being the NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy) GOST devices that enables scanning-in-AP-mode functionality.
+A generic Viam module for installing NetworkManager backports across different platforms and versions. This module enables fleet management of NetworkManager updates, with the first use case being the NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy) GOST devices that enables scanning-in-ap-mode functionality.
 
 ## Features
 
@@ -17,7 +17,9 @@ The installer component handles downloading, extracting, and installing NetworkM
 
 ### Configuration
 
-The following attribute template can be used to configure this model:
+**⚠️ IMPORTANT: All configuration attributes are REQUIRED for safety.**
+
+The module requires explicit configuration to prevent accidental system modifications. There are no smart defaults.
 
 ```json
 {
@@ -27,7 +29,7 @@ The following attribute template can be used to configure this model:
   "work_dir": "nm-backports-install",
   "platform": "ubuntu-22.04",
   "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy)",
-  "auto_install": true,
+  "auto_install": false,
   "force_reinstall": false,
   "cleanup_after_install": true,
   "verify_checksum": false,
@@ -39,13 +41,13 @@ The following attribute template can be used to configure this model:
 
 | Name | Type | Inclusion | Description |
 |------|------|-----------|-------------|
-| `backport_url` | string | Optional | URL to download the backport archive (defaults to GOST Jammy backport) |
-| `target_version` | string | Optional | Expected NetworkManager version after backport (default: "1.42.8") |
-| `archive_name` | string | Optional | Name of the archive file (default: "jammy-nm-backports.tar") |
-| `work_dir` | string | Optional | Working directory for installation (default: "nm-backports-install") |
-| `platform` | string | Optional | Platform identifier (default: "ubuntu-22.04") |
-| `description` | string | Optional | Human-readable description of the backport |
-| `auto_install` | boolean | Optional | Automatically install if backport not detected (default: true) |
+| `backport_url` | string | **REQUIRED** | URL to download the backport archive |
+| `target_version` | string | **REQUIRED** | Expected NetworkManager version after backport |
+| `archive_name` | string | **REQUIRED** | Name of the archive file |
+| `work_dir` | string | **REQUIRED** | Working directory for installation |
+| `platform` | string | **REQUIRED** | Platform identifier (e.g., "ubuntu-22.04") |
+| `description` | string | **REQUIRED** | Human-readable description of the backport |
+| `auto_install` | boolean | Optional | Automatically install if backport not detected (default: false) |
 | `force_reinstall` | boolean | Optional | Force reinstallation even if already installed (default: false) |
 | `cleanup_after_install` | boolean | Optional | Remove downloaded files after installation (default: true) |
 | `verify_checksum` | boolean | Optional | Verify archive checksum before installation (default: false) |
@@ -53,11 +55,16 @@ The following attribute template can be used to configure this model:
 
 #### Example Configurations
 
-**Basic GOST Jammy Configuration (Uses Defaults):**
+**GOST Jammy Configuration:**
 ```json
 {
-  "auto_install": true,
-  "cleanup_after_install": true
+  "backport_url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar",
+  "target_version": "1.42.8", 
+  "archive_name": "jammy-nm-backports.tar",
+  "work_dir": "jammy-nm-backports",
+  "platform": "ubuntu-22.04",
+  "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy) - enables scanning-in-ap-mode",
+  "auto_install": true
 }
 ```
 
@@ -167,6 +174,6 @@ Remove downloaded installation files.
 
 ```json
 {
-  "command": "cleanup"
+  "command": "cleanup_files"
 }
 ```
