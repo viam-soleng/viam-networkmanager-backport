@@ -1,28 +1,10 @@
 # NetworkManager Backport Module
 
-A generic Viam module for installing NetworkManager backports across different platforms and versions. This module enables fleet management of NetworkManager updates with automatic installation.
-
-## Features
-- **Generic Design**: Works with any NetworkManager backport following standard .deb distribution
-- **Fleet Management**: Deploy via Viam fragments across entire fleet
-- **Automated Installation**: Automatically installs on startup, then stops background tasks
-- **Automated Detection**: Checks if backport is already installed before attempting installation
-- **Health Monitoring**: Comprehensive status checking and error handling
-- **Configurable**: Support for different versions, platforms, and sources
-- **Idempotent**: Safe to run multiple times, only installs when needed
-- **Self-Cleaning**: Automatically removes installation files after completion
+A Viam module for automatically installing NetworkManager backports across device fleets. Installs once, then stops.
 
 ## Model hunter:networkmanager-backport:installer
 
 The installer component handles downloading, extracting, and installing NetworkManager backport packages from configurable sources with smart lifecycle management.
-
-### Behavior
-
-1. **Startup**: Module configures and starts background health check task (if auto_install: true)
-2. **First Check**: Runs after check_interval seconds, detects if backport needed
-3. **Auto-Install**: Downloads, installs, and configures NetworkManager backport automatically
-4. **Smart Shutdown**: Stops background tasks after successful installation to save resources
-5. **Cleanup**: Removes installation files automatically (if cleanup_after_install: true)
 
 ### Configuration
 
@@ -70,7 +52,7 @@ The module requires explicit configuration to prevent accidental system modifica
 
 ### Installation Process
 
-When auto-install is triggered, the module follow this sequence:
+When auto-install is triggered, the module follows this sequence:
 1. **Download**: Retrieves backport archive from configured URL
 2. **Verify**: Checks SHA256 checksum if configured
 3. **Extract**: Unpacks .deb packages from archive
@@ -79,7 +61,6 @@ When auto-install is triggered, the module follow this sequence:
 6. **Restart viam-agent**:  Restarts agent to refresh network interfaces (if enabled)
 7. **Cleanup**: Removes installation files (if enabled)
 8. **Shutdown**: Stops background health check task to save resources
-
 
 ### DoCommand
 
