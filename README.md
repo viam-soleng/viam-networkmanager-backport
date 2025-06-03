@@ -39,7 +39,7 @@ The installer component handles downloading, extracting, and installing NetworkM
 | Name | Type | Default | Description |
 |------|------|-----------|-------------|
 | `auto_install` | boolean | false | Automatically install if backport not detected |
-| `check_interval` | number | 3600 | Seconds between health checks |
+| `check_interval` | integer | 3600 | Seconds between health checks |
 | `force_reinstall` | boolean | false | Force reinstallation even if already installed |
 | `cleanup_after_install` | boolean | true | Remove downloaded files after installation |
 | `restart_viam_agent` | boolean | true | Restart viam-agent after NetworkManager restart |
