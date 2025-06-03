@@ -56,13 +56,6 @@ The module requires explicit configuration to prevent accidental system modifica
 | `platform` | string | Platform identifier (e.g., "ubuntu-22.04") |
 | `description` | string | Human-readable description of the backport |
 
-
-
-| `force_reinstall` | boolean | Optional | Force reinstallation even if already installed (default: false) |
-| `cleanup_after_install` | boolean | Optional | Remove downloaded files after installation (default: true) |
-| `verify_checksum` | boolean | Optional | Verify archive checksum before installation (default: false) |
-| `expected_checksum` | string | Required if verify_checksum=true | SHA256 checksum of the archive |
-
 #### Optional Attributes
 
 | Name | Type | Default | Description |
