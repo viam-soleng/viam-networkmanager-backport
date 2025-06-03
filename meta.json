@@ -3,7 +3,7 @@
   "module_id": "hunter:networkmanager-backport",
   "visibility": "public",
   "url": "https://github.com/hunter/networkmanager-backport",
-  "description": "Generic NetworkManager backport installer for fleet management across different platforms and versions",
+  "description": "Generic NetworkManager backport installer",
   "models": [
     {
       "api": "rdk:component:generic",
