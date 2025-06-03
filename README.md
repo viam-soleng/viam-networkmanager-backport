@@ -56,7 +56,7 @@ When auto-install is triggered, the module follows this sequence:
 5. **Restart NetworkManager**: Restarts service and waits for initialization
 6. **Restart viam-agent**:  Restarts agent to refresh network interfaces (if enabled)
 7. **Cleanup**: Removes installation files (if enabled)
-8. **Shutdown**: Stops background health check task to save resources
+8. **Shutdown**: Stops background health check task
 
 ### DoCommand
 
