@@ -50,7 +50,7 @@ The installer component handles downloading, extracting, and installing NetworkM
 
 When auto-install is triggered, the module follows this sequence:
 1. **Download**: Retrieves backport archive from configured URL
-2. **Verify**: Checks SHA256 checksum if configured
+2. **Verify**: Checks SHA256 checksum (if enabled)
 3. **Extract**: Unpacks .deb packages from archive
 4. **Install**: Uses `dpkg -i` to install packages, with automatic dependency fixing
 5. **Restart NetworkManager**: Restarts service and waits for initialization
