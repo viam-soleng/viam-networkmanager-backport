@@ -8,10 +8,6 @@ The installer component handles downloading, extracting, and installing NetworkM
 
 ### Configuration
 
-**⚠️ IMPORTANT: All configuration attributes are REQUIRED for safety.**
-
-The module requires explicit configuration to prevent accidental system modifications.
-
 ```json
 {
   "backport_url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar",
