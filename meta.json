@@ -8,7 +8,7 @@
     {
       "api": "rdk:component:generic",
       "model": "hunter:networkmanager-backport:installer",
-      "short_description": "Generic NetworkManager backport installer supporting any version/platform",
+      "short_description": "Generic NetworkManager backport installer",
       "markdown_link": "README.md#model-hunternetworkmanager-backportinstaller"
     }
   ],
