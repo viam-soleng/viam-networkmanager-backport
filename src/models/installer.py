@@ -35,7 +35,7 @@ class Installer(Generic, EasyResource):
         super().__init__(name)
         
         # Configuration attributes
-        # MUST set via reconfigure
+        # Must set via reconfigure
         self._backport_url = None
         self._target_version = None
         self._archive_name = None
@@ -54,10 +54,11 @@ class Installer(Generic, EasyResource):
         self._restart_viam_agent = True
         
         # Computed paths
-        # Set after reconfigure
         self._backup_dir = None
-        # Track if properly configured
         self._configured = False  
+
+        # Background task management
+        self._health_check_task = None
 
     @classmethod
     def new(
@@ -75,7 +76,7 @@ class Installer(Generic, EasyResource):
         """Validate the component configuration."""
         # Convert config attributes to dict for easier access
         attrs = struct_to_dict(config.attributes) if config.attributes else {}
-        
+    
         # REQUIRED: Validate all essential backport configuration
         backport_url = attrs.get("backport_url")
         if not backport_url or not isinstance(backport_url, str) or not backport_url.startswith(("http://", "https://")):
@@ -122,7 +123,7 @@ class Installer(Generic, EasyResource):
         if not isinstance(restart_viam_agent, bool):
             raise ValueError("restart_viam_agent must be a boolean")
             
-        # If checksum verification is enabled, then checksum MUST be provided!
+        # If checksum verification is enabled, then checksum must be provided!
         if verify_checksum:
             expected_checksum = attrs.get("expected_checksum")
             if not expected_checksum or not isinstance(expected_checksum, str):
@@ -136,17 +137,19 @@ class Installer(Generic, EasyResource):
     ):
         """Reconfigure the component with new settings."""
         attrs = struct_to_dict(config.attributes) if config.attributes else {}
+
+        # Stop existing task before reconfiguration
+        self._stop_health_check_task()
         
-        # Update REQUIRED backport configuration
-        # No defaults
+        # Update required configuration
         self._backport_url = attrs.get("backport_url")
         self._target_version = attrs.get("target_version")
         self._archive_name = attrs.get("archive_name")
         self._work_dir = attrs.get("work_dir")
         self._platform = attrs.get("platform")
         self._description = attrs.get("description")
-        
-        # Validate all required fields are present
+
+        # Validate the required fields
         if not all([self._backport_url, self._target_version, self._archive_name, 
                    self._work_dir, self._platform, self._description]):
             self._configured = False
@@ -154,7 +157,7 @@ class Installer(Generic, EasyResource):
             LOGGER.error("Required: backport_url, target_version, archive_name, work_dir, platform, description")
             return
         
-        # Update behavioral configuration with safe defaults
+        # Update optional configuration with defaults
         self._auto_install = attrs.get("auto_install", False)
         self._check_interval = attrs.get("check_interval", 3600)
         self._force_reinstall = attrs.get("force_reinstall", False)
@@ -163,15 +166,106 @@ class Installer(Generic, EasyResource):
         self._expected_checksum = attrs.get("expected_checksum", None)
         self._restart_viam_agent = attrs.get("restart_viam_agent", True)
         
-        # Update computed paths
+        # Compute paths
         self._backup_dir = Path.home() / self._work_dir
         self._configured = True
         
+        # Log configuration
         LOGGER.info(f"Successfully configured {self.name}")
         LOGGER.info(f"Description: {self._description}")
         LOGGER.info(f"Target: {self._target_version} from {self._backport_url}")
-        LOGGER.info(f"Auto-install: {self._auto_install}, Force: {self._force_reinstall}")
+        LOGGER.info(f"Auto-install: {self._auto_install}, Check interval: {self._check_interval}s")
         LOGGER.info(f"Working directory: {self._backup_dir}")
+
+        # Start background task (if auto-install is enabled)
+        if self._auto_install and self._configured:
+            self._start_health_check_task()
+
+    def _start_health_check_task(self):
+        """Start the background health check task."""
+        if self._health_check_task and not self._health_check_task.done():
+            self._health_check_task.cancel()
+        
+        self._health_check_task = asyncio.create_task(self._run_health_checks())
+        LOGGER.info(f"Started background health check task for {self.name} (interval: {self._check_interval}s)")
+
+    def _stop_health_check_task(self):
+        """Stop the background health check task."""
+        if self._health_check_task and not self._health_check_task.done():
+            self._health_check_task.cancel()
+            LOGGER.info(f"Stopped background health check task for {self.name}")
+        # Clear the task reference
+        self._health_check_task = None
+
+    async def _run_health_checks(self):
+        """Background task that runs health checks at the configured interval."""
+        LOGGER.info(f"Background health check started for {self.name} - first check in {self._check_interval} seconds")
+        
+        try:
+            while True:
+                try:
+                    # Sleep for the specified check interval
+                    await asyncio.sleep(self._check_interval)
+                    
+                    # Run health check
+                    LOGGER.info(f"Running scheduled health check for {self.name}")
+                    await self._perform_health_check()
+                    
+                    # Check if task was stopped during health check
+                    if self._health_check_task is None or self._health_check_task.done():
+                        LOGGER.info(f"Health check task stopping for {self.name}")
+                        break
+                    
+                except asyncio.CancelledError:
+                    LOGGER.info(f"Health check task cancelled for {self.name}")
+                    raise
+                except Exception as e:
+                    LOGGER.error(f"Error during health check for {self.name}: {e}")
+                    # Continue running despite errors
+                    
+        except asyncio.CancelledError:
+            LOGGER.info(f"Background health check task stopped for {self.name}")
+        except Exception as e:
+            LOGGER.error(f"Fatal error in health check task for {self.name}: {e}")
+
+    async def _perform_health_check(self):
+        """Perform the actual health check and auto-install if needed."""
+        try:
+            # Check current status
+            status = await self._check_backport_status()
+            
+            # Auto-install if needed
+            if not status.get("is_backported", False):
+                LOGGER.info(f"Auto-installing NetworkManager backport for {self.name}")
+                install_result = await self._install_backport()
+                
+                if install_result.get("success"):
+                    LOGGER.info(f"Auto-install completed successfully for {self.name}")
+                    # After successful install, stop the background task
+                    LOGGER.info(f"NetworkManager backport installation complete - stopping background health checks for {self.name}")
+                    self._stop_health_check_task()
+                else:
+                    LOGGER.error(f"Auto-install failed for {self.name}: {install_result.get('error', 'Unknown error')}")
+            else:
+                LOGGER.debug(f"NetworkManager backport already installed for {self.name}")
+                
+                # Clean up leftover files if needed
+                if status.get("backport_files_exist") and self._cleanup_after_install:
+                    LOGGER.info(f"Cleaning up leftover installation files for {self.name}")
+                    await self._cleanup_files()
+                
+                # Backport already installed - stop background task
+                LOGGER.info(f"NetworkManager backport already installed - stopping background health checks for {self.name}")
+                self._stop_health_check_task()
+                    
+        except Exception as e:
+            LOGGER.error(f"Health check failed for {self.name}: {e}")
+
+    async def close(self):
+        """Clean up resources when the component is shut down."""
+        LOGGER.info(f"Shutting down {self.name}")
+        self._stop_health_check_task()
+        await super().close()
 
     async def do_command(
         self,
@@ -261,7 +355,7 @@ class Installer(Generic, EasyResource):
                     "version": status.get("current_version")
                 }
             
-            LOGGER.info("Starting NetworkManager backport installation...")
+            LOGGER.info(f"Starting NetworkManager backport installation for {self.name}")
             LOGGER.info(f"Installing {self._description}")
             LOGGER.info(f"Target version: {self._target_version}")
             
@@ -402,36 +496,30 @@ class Installer(Generic, EasyResource):
             
             # Check backport status
             backport_status = await self._check_backport_status()
+
+            # Determine overall health
+            overall_health = "healthy" if service_active and backport_status.get("is_backported") else "degraded"
             
             # Check if auto-install should run
             should_auto_install = (
                 self._auto_install and 
                 not backport_status.get("is_backported", False)
             )
-            
-            health_status = {
-                "overall_health": "healthy" if service_active and backport_status.get("is_backported") else "degraded",
+
+            result = {
+                "overall_health": overall_health,
                 "networkmanager_service_active": service_active,
                 "backport_status": backport_status,
                 "should_auto_install": should_auto_install,
-                "timestamp": asyncio.get_event_loop().time()
+                "background_task_running": self._health_check_task is not None and not self._health_check_task.done()
             }
             
-            # Auto-install (if configured and still needed)
+             # Auto-install if needed (when called via do_command)
             if should_auto_install:
-                LOGGER.info(f"Auto-installing NetworkManager backport for {self.name}")
+                LOGGER.info(f"Running auto-install via health check command for {self.name}")
                 install_result = await self._install_backport()
-                health_status["auto_install_result"] = install_result
-
-            # Clean up leftover files (if backport is installed and cleanup is enabled)
-            elif (backport_status.get("is_backported") and 
-                  backport_status.get("backport_files_exist") and 
-                  self._cleanup_after_install):
-                LOGGER.info(f"Cleaning up leftover installation files for {self.name}")
-                cleanup_result = await self._cleanup_files()
-                health_status["cleanup_result"] = cleanup_result
-            
-            return health_status
+                result["auto_install_result"] = install_result
+            return result
             
         except Exception as e:
             return {
@@ -444,6 +532,7 @@ class Installer(Generic, EasyResource):
         try:
             if self._backup_dir.exists():
                 shutil.rmtree(self._backup_dir)
+                LOGGER.info(f"Cleaned up {self._backup_dir}")
                 return {
                     "success": True,
                     "message": f"Cleaned up {self._backup_dir}"
@@ -469,14 +558,6 @@ class Installer(Generic, EasyResource):
                     "backport_url", "target_version", "archive_name", 
                     "work_dir", "platform", "description"
                 ],
-                "example_config": {
-                    "backport_url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar",
-                    "target_version": "1.42.8",
-                    "archive_name": "jammy-nm-backports.tar",
-                    "work_dir": "nm-backports-install",
-                    "platform": "ubuntu-22.04",
-                    "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy)"
-                }
             }
         
         return {
@@ -493,7 +574,8 @@ class Installer(Generic, EasyResource):
             "cleanup_after_install": self._cleanup_after_install,
             "verify_checksum": self._verify_checksum,
             "restart_viam_agent": self._restart_viam_agent,
-            "backup_dir": str(self._backup_dir) if self._backup_dir else None
+            "backup_dir": str(self._backup_dir) if self._backup_dir else None,
+            "background_task_running": self._health_check_task is not None and not self._health_check_task.done()
         }
 
     async def _list_available_backports(self) -> Dict[str, Any]:
