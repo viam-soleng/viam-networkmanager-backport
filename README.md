@@ -47,14 +47,14 @@ The module requires explicit configuration to prevent accidental system modifica
 
 #### Required Attributes
 
-| Name | Type | Inclusion | Description |
-|------|------|-----------|-------------|
-| `backport_url` | string | **REQUIRED** | URL to download the backport archive |
-| `target_version` | string | **REQUIRED** | Expected NetworkManager version after backport |
-| `archive_name` | string | **REQUIRED** | Name of the archive file |
-| `work_dir` | string | **REQUIRED** | Working directory for installation |
-| `platform` | string | **REQUIRED** | Platform identifier (e.g., "ubuntu-22.04") |
-| `description` | string | **REQUIRED** | Human-readable description of the backport |
+| Name | Type | Description |
+|------|------|-----------|
+| `backport_url` | string | URL to download the backport archive |
+| `target_version` | string | Expected NetworkManager version after backport |
+| `archive_name` | string | Name of the archive file |
+| `work_dir` | string | Working directory for installation |
+| `platform` | string | Platform identifier (e.g., "ubuntu-22.04") |
+| `description` | string | Human-readable description of the backport |
 
 
 
@@ -65,10 +65,15 @@ The module requires explicit configuration to prevent accidental system modifica
 
 #### Optional Attributes
 
-| Name | Type | Inclusion | Description |
+| Name | Type | Default | Description |
 |------|------|-----------|-------------|
-| `auto_install` | boolean | Optional | Automatically install if backport not detected (default: false) |
-| `check_interval` | number | Optional | Automatically install if backport not detected (default: false) |
+| `auto_install` | boolean | false | Automatically install if backport not detected |
+| `check_interval` | number | 3600 | Seconds between health checks |
+| `force_reinstall` | boolean | false | Force reinstallation even if already installed |
+| `cleanup_after_install` | boolean | true | Remove downloaded files after installation |
+| `restart_viam_agent` | boolean | true | Restart viam-agent after NetworkManager restart |
+| `verify_checksum` | boolean | false | Verify archive checksum before installation |
+| `expected_checksum` | string | null | SHA256 checksum (required if verify_checksum=true) |
 
 ### Installation Process
 
