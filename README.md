@@ -1,6 +1,6 @@
 # NetworkManager Backport Module
 
-A Viam module for automatically installing NetworkManager backports across device fleets.
+A Viam module for installing NetworkManager backports across device fleets.
 
 ## Model hunter:networkmanager-backport:installer
 
