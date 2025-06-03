@@ -423,7 +423,7 @@ class Installer(Generic, EasyResource):
                 install_result = await self._install_backport()
                 health_status["auto_install_result"] = install_result
 
-            # Clean up leftover files if backport is installed and cleanup is enabled
+            # Clean up leftover files (if backport is installed and cleanup is enabled)
             elif (backport_status.get("is_backported") and 
                   backport_status.get("backport_files_exist") and 
                   self._cleanup_after_install):
