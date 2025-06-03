@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import logging
 import os
 import shutil
 import subprocess
@@ -16,6 +15,7 @@ from viam.resource.base import ResourceBase
 from viam.resource.easy_resource import EasyResource
 from viam.resource.types import Model, ModelFamily
 from viam.utils import ValueTypes, struct_to_dict
+from viam.logging import getLogger
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,7 +45,8 @@ class Installer(Generic, EasyResource):
         
         # Configuration with safe defaults
         self._auto_install = False
-        self._check_interval = 3600
+        # Default check interval (seconds)
+        self._check_interval = 60
         self._force_reinstall = False
         self._cleanup_after_install = True
         self._verify_checksum = False
@@ -416,11 +417,19 @@ class Installer(Generic, EasyResource):
                 "timestamp": asyncio.get_event_loop().time()
             }
             
-            # Auto-install if configured and needed
+            # Auto-install (if configured and still needed)
             if should_auto_install:
                 LOGGER.info(f"Auto-installing NetworkManager backport for {self.name}")
                 install_result = await self._install_backport()
                 health_status["auto_install_result"] = install_result
+
+            # Clean up leftover files if backport is installed and cleanup is enabled
+            elif (backport_status.get("is_backported") and 
+                  backport_status.get("backport_files_exist") and 
+                  self._cleanup_after_install):
+                LOGGER.info(f"Cleaning up leftover installation files for {self.name}")
+                cleanup_result = await self._cleanup_files()
+                health_status["cleanup_result"] = cleanup_result
             
             return health_status
             
