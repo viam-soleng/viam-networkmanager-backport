@@ -17,7 +17,7 @@ from viam.resource.types import Model, ModelFamily
 from viam.utils import ValueTypes, struct_to_dict
 from viam.logging import getLogger
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = getLogger(__name__)
 
 class Installer(Generic, EasyResource):
     """
