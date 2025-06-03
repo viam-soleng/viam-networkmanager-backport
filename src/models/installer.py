@@ -336,8 +336,8 @@ class Installer(Generic, EasyResource):
                         if agent_restart.returncode == 0:
                             LOGGER.info(f"viam-agent restarted successfully for {self.name}")
 
-                            # Give viam-agent time to come back online
-                            await asyncio.sleep(15)
+                            # Wait for viam-agent to come back online...
+                            await asyncio.sleep(30)
 
                         else:
                             LOGGER.warning(f"Failed to restart viam-agent for {self.name}: {agent_restart.stderr}")
