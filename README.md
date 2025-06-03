@@ -1,43 +1,51 @@
 # NetworkManager Backport Module
 
-A generic Viam module for installing NetworkManager backports across different platforms and versions. This module enables fleet management of NetworkManager updates, with the first use case being the NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy) GOST devices that enables scanning-in-ap-mode functionality.
+A generic Viam module for installing NetworkManager backports across different platforms and versions. This module enables fleet management of NetworkManager updates with automatic installation.
 
 ## Features
-
 - **Generic Design**: Works with any NetworkManager backport following standard .deb distribution
 - **Fleet Management**: Deploy via Viam fragments across entire fleet
+- **Automated Installation**: Automatically installs on startup, then stops background tasks
 - **Automated Detection**: Checks if backport is already installed before attempting installation
 - **Health Monitoring**: Comprehensive status checking and error handling
 - **Configurable**: Support for different versions, platforms, and sources
 - **Idempotent**: Safe to run multiple times, only installs when needed
+- **Self-Cleaning**: Automatically removes installation files after completion
 
 ## Model hunter:networkmanager-backport:installer
 
-The installer component handles downloading, extracting, and installing NetworkManager backport packages from configurable sources.
+The installer component handles downloading, extracting, and installing NetworkManager backport packages from configurable sources with smart lifecycle management.
+
+### Behavior
+
+1. **Startup**: Module configures and starts background health check task (if auto_install: true)
+2. **First Check**: Runs after check_interval seconds, detects if backport needed
+3. **Auto-Install**: Downloads, installs, and configures NetworkManager backport automatically
+4. **Smart Shutdown**: Stops background tasks after successful installation to save resources
+5. **Cleanup**: Removes installation files automatically (if cleanup_after_install: true)
 
 ### Configuration
 
 **⚠️ IMPORTANT: All configuration attributes are REQUIRED for safety.**
 
-The module requires explicit configuration to prevent accidental system modifications. There are no smart defaults.
+The module requires explicit configuration to prevent accidental system modifications.
 
 ```json
 {
   "backport_url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar",
   "target_version": "1.42.8",
   "archive_name": "jammy-nm-backports.tar",
-  "work_dir": "nm-backports-install",
-  "platform": "ubuntu-22.04",
+  "work_dir": "jammy-nm-backports",
+  "platform": "jetson-orin-nx-ubuntu-22.04",
   "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy)",
-  "auto_install": false,
-  "force_reinstall": false,
+  "auto_install": true,
   "cleanup_after_install": true,
-  "verify_checksum": false,
-  "expected_checksum": "optional-sha256-checksum"
+  "restart_viam_agent": true,
+  "check_interval": 60
 }
 ```
 
-#### Attributes
+#### Required Attributes
 
 | Name | Type | Inclusion | Description |
 |------|------|-----------|-------------|
@@ -47,48 +55,33 @@ The module requires explicit configuration to prevent accidental system modifica
 | `work_dir` | string | **REQUIRED** | Working directory for installation |
 | `platform` | string | **REQUIRED** | Platform identifier (e.g., "ubuntu-22.04") |
 | `description` | string | **REQUIRED** | Human-readable description of the backport |
-| `auto_install` | boolean | Optional | Automatically install if backport not detected (default: false) |
+
+
+
 | `force_reinstall` | boolean | Optional | Force reinstallation even if already installed (default: false) |
 | `cleanup_after_install` | boolean | Optional | Remove downloaded files after installation (default: true) |
 | `verify_checksum` | boolean | Optional | Verify archive checksum before installation (default: false) |
 | `expected_checksum` | string | Required if verify_checksum=true | SHA256 checksum of the archive |
 
-#### Example Configurations
+#### Optional Attributes
 
-**GOST Jammy Configuration:**
-```json
-{
-  "backport_url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar",
-  "target_version": "1.42.8", 
-  "archive_name": "jammy-nm-backports.tar",
-  "work_dir": "jammy-nm-backports",
-  "platform": "ubuntu-22.04",
-  "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy) - enables scanning-in-ap-mode",
-  "auto_install": true
-}
-```
+| Name | Type | Inclusion | Description |
+|------|------|-----------|-------------|
+| `auto_install` | boolean | Optional | Automatically install if backport not detected (default: false) |
+| `check_interval` | number | Optional | Automatically install if backport not detected (default: false) |
 
-**Custom Backport Configuration:**
-```json
-{
-  "backport_url": "https://example.com/custom-nm-backports.tar",
-  "target_version": "1.45.0",
-  "platform": "ubuntu-24.04", 
-  "description": "Custom NetworkManager 1.45.0 backport",
-  "verify_checksum": true,
-  "expected_checksum": "a1b2c3d4e5f6..."
-}
-```
+### Installation Process
 
-**Development/Testing Configuration:**
-```json
-{
-  "auto_install": false,
-  "force_reinstall": true,
-  "cleanup_after_install": false,
-  "work_dir": "dev-nm-test"
-}
-```
+When auto-install is triggered, the module follow this sequence:
+1. **Download**: Retrieves backport archive from configured URL
+2. **Verify**: Checks SHA256 checksum if configured
+3. **Extract**: Unpacks .deb packages from archive
+4. **Install**: Uses `dpkg -i` to install packages, with automatic dependency fixing
+5. **Restart NetworkManager**: Restarts service and waits for initialization
+6. **Restart viam-agent**:  Restarts agent to refresh network interfaces (if enabled)
+7. **Cleanup**: Removes installation files (if enabled)
+8. **Shutdown**: Stops background health check task to save resources
+
 
 ### DoCommand
 
@@ -106,16 +99,20 @@ Check current backport installation status.
 **Response:**
 ```json
 {
+  "status": "installed",
   "is_backported": true,
   "current_version": "1.42.8",
-  "target_version": "1.42.8", 
-  "platform": "ubuntu-22.04",
-  "status": "installed"
+  "target_version": "1.42.8",
+  "platform": "jetson-orin-nx-ubuntu-22.04",
+  "auto_install_enabled": true,
+  "backport_files_exist": false,
+  "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy)",
+  "backport_url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar"
 }
 ```
 
 #### install_backport
-Install or reinstall the NetworkManager backport.
+Manually install or reinstall the NetworkManager backport.
 
 ```json
 {
@@ -129,7 +126,8 @@ Install or reinstall the NetworkManager backport.
   "success": true,
   "message": "NetworkManager backport installed successfully",
   "action": "installed",
-  "version": "1.42.8"
+  "version": "1.42.8",
+  "is_backported": true
 }
 ```
 
@@ -142,6 +140,15 @@ Get current NetworkManager version.
 }
 ```
 
+**Response**:
+```json
+{
+  "version": "1.42.8",
+  "is_target_version": true
+}
+```
+
+
 #### health_check
 Perform comprehensive system health check with optional auto-install.
 
@@ -151,21 +158,45 @@ Perform comprehensive system health check with optional auto-install.
 }
 ```
 
+**Response**:
+```json
+{
+  "overall_health": "healthy",
+  "networkmanager_service_active": true,
+  "should_auto_install": false,
+  "background_task_running": false,
+  "backport_status": { ... }
+}
+```
+
+#### get_config
+Get current module configuration and status.
+
+```json
+{
+  "command": "get_config"
+}
+```
+
+**Response**:
+```json
+{
+  "configured": true,
+  "auto_install": true,
+  "check_interval": 60,
+  "background_task_running": false,
+  "backup_dir": "/root/jammy-nm-backports",
+  "target_version": "1.42.8",
+  "platform": "jetson-orin-nx-ubuntu-22.04"
+}
+```
+
 #### validate_archive
 Validate the backport archive without installing.
 
 ```json
 {
   "command": "validate_archive"
-}
-```
-
-#### get_config
-Get current module configuration.
-
-```json
-{
-  "command": "get_config"
 }
 ```
 
