@@ -34,7 +34,8 @@ class Installer(Generic, EasyResource):
     def __init__(self, name: str):
         super().__init__(name)
         
-        # Configuration attributes (MUST be set via reconfigure - no defaults)
+        # Configuration attributes
+        # MUST set via reconfigure
         self._backport_url = None
         self._target_version = None
         self._archive_name = None
@@ -42,17 +43,20 @@ class Installer(Generic, EasyResource):
         self._platform = None
         self._description = None
         
-        # Behavioral configuration with safe defaults
-        self._auto_install = False  # Safe default: require manual installation
+        # Configuration with safe defaults
+        self._auto_install = False
         self._check_interval = 3600
         self._force_reinstall = False
         self._cleanup_after_install = True
         self._verify_checksum = False
         self._expected_checksum = None
+        self._restart_viam_agent = True
         
-        # Computed paths (will be set after reconfigure)
+        # Computed paths
+        # Set after reconfigure
         self._backup_dir = None
-        self._configured = False  # Track if properly configured
+        # Track if properly configured
+        self._configured = False  
 
     @classmethod
     def new(
@@ -112,14 +116,19 @@ class Installer(Generic, EasyResource):
         verify_checksum = attrs.get("verify_checksum", False)
         if not isinstance(verify_checksum, bool):
             raise ValueError("verify_checksum must be a boolean")
+
+        restart_viam_agent = attrs.get("restart_viam_agent", True)
+        if not isinstance(restart_viam_agent, bool):
+            raise ValueError("restart_viam_agent must be a boolean")
             
-        # If checksum verification is enabled, checksum must be provided
+        # If checksum verification is enabled, then checksum MUST be provided!
         if verify_checksum:
             expected_checksum = attrs.get("expected_checksum")
             if not expected_checksum or not isinstance(expected_checksum, str):
                 raise ValueError("expected_checksum must be provided when verify_checksum is true")
         
-        return [], []  # No dependencies required
+        # No dependencies required
+        return [], []  
 
     def reconfigure(
         self, config: ComponentConfig, dependencies: Mapping[ResourceName, ResourceBase]
@@ -127,7 +136,8 @@ class Installer(Generic, EasyResource):
         """Reconfigure the component with new settings."""
         attrs = struct_to_dict(config.attributes) if config.attributes else {}
         
-        # Update REQUIRED backport configuration (no defaults)
+        # Update REQUIRED backport configuration
+        # No defaults
         self._backport_url = attrs.get("backport_url")
         self._target_version = attrs.get("target_version")
         self._archive_name = attrs.get("archive_name")
@@ -144,12 +154,13 @@ class Installer(Generic, EasyResource):
             return
         
         # Update behavioral configuration with safe defaults
-        self._auto_install = attrs.get("auto_install", False)  # Default to manual
+        self._auto_install = attrs.get("auto_install", False)
         self._check_interval = attrs.get("check_interval", 3600)
         self._force_reinstall = attrs.get("force_reinstall", False)
         self._cleanup_after_install = attrs.get("cleanup_after_install", True)
         self._verify_checksum = attrs.get("verify_checksum", False)
         self._expected_checksum = attrs.get("expected_checksum", None)
+        self._restart_viam_agent = attrs.get("restart_viam_agent", True)
         
         # Update computed paths
         self._backup_dir = Path.home() / self._work_dir
@@ -306,8 +317,38 @@ class Installer(Generic, EasyResource):
             
             if restart_result.returncode != 0:
                 LOGGER.warning(f"Failed to restart NetworkManager for {self.name}: {restart_result.stderr}")
+            else:
+                # Wait for NetworkManager to fully initialize
+                LOGGER.info(f"NetworkManager restarted successfully for {self.name}, waiting for initialization...")
+                await asyncio.sleep(10)
+
+                # Check if NetworkManager is properly running
+                status_check = await self._run_command(["systemctl", "is-active", "NetworkManager"])
+                
+                if status_check.returncode == 0:
+                    # Restart viam-agent to re-initialize network interfaces (if enabled)
+                    if self._restart_viam_agent:
+                        LOGGER.info(f"Restarting viam-agent for {self.name} to refresh network interfaces...")
+                        agent_restart = await self._run_command([
+                            "sudo", "systemctl", "restart", "viam-agent"
+                        ])
+
+                        if agent_restart.returncode == 0:
+                            LOGGER.info(f"viam-agent restarted successfully for {self.name}")
+
+                            # Give viam-agent time to come back online
+                            await asyncio.sleep(15)
+
+                        else:
+                            LOGGER.warning(f"Failed to restart viam-agent for {self.name}: {agent_restart.stderr}")
+
+                    else:
+                        LOGGER.info(f"viam-agent restart disabled for {self.name}")
+
+                else:
+                    LOGGER.error(f"NetworkManager failed to start properly for {self.name}")
             
-            # Cleanup if requested
+            # Cleanup files (if configured)
             if self._cleanup_after_install:
                 await self._cleanup_files()
             
@@ -442,6 +483,7 @@ class Installer(Generic, EasyResource):
             "force_reinstall": self._force_reinstall,
             "cleanup_after_install": self._cleanup_after_install,
             "verify_checksum": self._verify_checksum,
+            "restart_viam_agent": self._restart_viam_agent,
             "backup_dir": str(self._backup_dir) if self._backup_dir else None
         }
 
@@ -460,7 +502,7 @@ class Installer(Generic, EasyResource):
                         "archive_name": "jammy-nm-backports.tar",
                         "work_dir": "jammy-nm-backports",
                         "platform": "ubuntu-22.04",
-                        "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy) - enables scanning-in-ap-mode"
+                        "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy)"
                     }
                 }
                 # Future: could dynamically discover more backports
