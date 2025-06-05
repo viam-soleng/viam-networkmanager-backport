@@ -42,7 +42,7 @@ class Installer(Generic, EasyResource):
         
         # Optional configuration with safe defaults
         self._auto_install = True
-        self._check_interval = 3600
+        self._check_interval = 60
         self._force_reinstall = False
         self._cleanup_after_install = True
         self._restart_viam_agent = True
@@ -71,7 +71,7 @@ class Installer(Generic, EasyResource):
         """Validate the component configuration."""
         attrs = struct_to_dict(config.attributes) if config.attributes else {}
     
-        # Required: Validate all essential backport configuration
+        # Required: Validate backport configuration
         backport_url = attrs.get("backport_url")
         if not backport_url or not isinstance(backport_url, str) or not backport_url.startswith(("http://", "https://")):
             raise ValueError("backport_url is required and must be a valid HTTP/HTTPS URL")
@@ -93,7 +93,7 @@ class Installer(Generic, EasyResource):
         if not isinstance(auto_install, bool):
             raise ValueError("auto_install must be a boolean")
             
-        check_interval = attrs.get("check_interval", 3600)
+        check_interval = attrs.get("check_interval", 60)
         if not isinstance(check_interval, (int, float)) or check_interval <= 0:
             raise ValueError("check_interval must be a positive number")
             
@@ -143,7 +143,7 @@ class Installer(Generic, EasyResource):
         
         # Update optional configuration with defaults
         self._auto_install = attrs.get("auto_install", True)
-        self._check_interval = attrs.get("check_interval", 3600)
+        self._check_interval = attrs.get("check_interval", 60)
         self._force_reinstall = attrs.get("force_reinstall", False)
         self._cleanup_after_install = attrs.get("cleanup_after_install", True)
         self._restart_viam_agent = attrs.get("restart_viam_agent", True)
