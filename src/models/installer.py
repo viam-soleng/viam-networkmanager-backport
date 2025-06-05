@@ -1,11 +1,11 @@
 import asyncio
-import hashlib
 import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Mapping, Optional, Sequence, Tuple
+from urllib.parse import urlparse
 
 from typing_extensions import Self
 from viam.components.generic import Generic
@@ -34,26 +34,21 @@ class Installer(Generic, EasyResource):
     def __init__(self, name: str):
         super().__init__(name)
         
-        # Configuration attributes
-        # Must set via reconfigure
+        # Required configuration attributes
         self._backport_url = None
         self._target_version = None
-        self._archive_name = None
         self._work_dir = None
         self._platform = None
-        self._description = None
         
-        # Configuration with safe defaults
-        self._auto_install = False
-        # Default check interval (seconds)
-        self._check_interval = 60
+        # Optional configuration with safe defaults
+        self._auto_install = True
+        self._check_interval = 3600
         self._force_reinstall = False
         self._cleanup_after_install = True
-        self._verify_checksum = False
-        self._expected_checksum = None
         self._restart_viam_agent = True
         
-        # Computed paths
+        # Computed attributes
+        self._archive_name = None
         self._backup_dir = None
         self._configured = False  
 
@@ -74,10 +69,9 @@ class Installer(Generic, EasyResource):
         cls, config: ComponentConfig
     ) -> Tuple[Sequence[str], Sequence[str]]:
         """Validate the component configuration."""
-        # Convert config attributes to dict for easier access
         attrs = struct_to_dict(config.attributes) if config.attributes else {}
     
-        # REQUIRED: Validate all essential backport configuration
+        # Required: Validate all essential backport configuration
         backport_url = attrs.get("backport_url")
         if not backport_url or not isinstance(backport_url, str) or not backport_url.startswith(("http://", "https://")):
             raise ValueError("backport_url is required and must be a valid HTTP/HTTPS URL")
@@ -86,10 +80,6 @@ class Installer(Generic, EasyResource):
         if not target_version or not isinstance(target_version, str) or not target_version.strip():
             raise ValueError("target_version is required and must be a non-empty string")
             
-        archive_name = attrs.get("archive_name")
-        if not archive_name or not isinstance(archive_name, str) or not archive_name.strip():
-            raise ValueError("archive_name is required and must be a non-empty string")
-            
         work_dir = attrs.get("work_dir")
         if not work_dir or not isinstance(work_dir, str) or not work_dir.strip():
             raise ValueError("work_dir is required and must be a non-empty string")
@@ -97,13 +87,9 @@ class Installer(Generic, EasyResource):
         platform = attrs.get("platform")
         if not platform or not isinstance(platform, str) or not platform.strip():
             raise ValueError("platform is required and must be a non-empty string")
-        
-        description = attrs.get("description")
-        if not description or not isinstance(description, str) or not description.strip():
-            raise ValueError("description is required and must be a non-empty string")
             
-        # Validate behavioral parameters
-        auto_install = attrs.get("auto_install", False)
+        # Validate optional behavioral parameters
+        auto_install = attrs.get("auto_install", True)
         if not isinstance(auto_install, bool):
             raise ValueError("auto_install must be a boolean")
             
@@ -114,20 +100,10 @@ class Installer(Generic, EasyResource):
         force_reinstall = attrs.get("force_reinstall", False)
         if not isinstance(force_reinstall, bool):
             raise ValueError("force_reinstall must be a boolean")
-            
-        verify_checksum = attrs.get("verify_checksum", False)
-        if not isinstance(verify_checksum, bool):
-            raise ValueError("verify_checksum must be a boolean")
 
         restart_viam_agent = attrs.get("restart_viam_agent", True)
         if not isinstance(restart_viam_agent, bool):
             raise ValueError("restart_viam_agent must be a boolean")
-            
-        # If checksum verification is enabled, then checksum must be provided!
-        if verify_checksum:
-            expected_checksum = attrs.get("expected_checksum")
-            if not expected_checksum or not isinstance(expected_checksum, str):
-                raise ValueError("expected_checksum must be provided when verify_checksum is true")
         
         # No dependencies required
         return [], []  
@@ -144,26 +120,32 @@ class Installer(Generic, EasyResource):
         # Update required configuration
         self._backport_url = attrs.get("backport_url")
         self._target_version = attrs.get("target_version")
-        self._archive_name = attrs.get("archive_name")
         self._work_dir = attrs.get("work_dir")
         self._platform = attrs.get("platform")
-        self._description = attrs.get("description")
 
-        # Validate the required fields
-        if not all([self._backport_url, self._target_version, self._archive_name, 
-                   self._work_dir, self._platform, self._description]):
+        # Validate required fields
+        if not all([self._backport_url, self._target_version, self._work_dir, self._platform]):
             self._configured = False
             LOGGER.error(f"Module {self.name} not properly configured - missing required attributes")
-            LOGGER.error("Required: backport_url, target_version, archive_name, work_dir, platform, description")
+            LOGGER.error("Required: backport_url, target_version, work_dir, platform")
+            return
+        
+        # Extract archive name from URL
+        try:
+            parsed_url = urlparse(self._backport_url)
+            self._archive_name = Path(parsed_url.path).name
+            if not self._archive_name:
+                raise ValueError("Could not extract filename from backport_url")
+        except Exception as e:
+            self._configured = False
+            LOGGER.error(f"Failed to extract archive name from URL: {e}")
             return
         
         # Update optional configuration with defaults
-        self._auto_install = attrs.get("auto_install", False)
+        self._auto_install = attrs.get("auto_install", True)
         self._check_interval = attrs.get("check_interval", 3600)
         self._force_reinstall = attrs.get("force_reinstall", False)
         self._cleanup_after_install = attrs.get("cleanup_after_install", True)
-        self._verify_checksum = attrs.get("verify_checksum", False)
-        self._expected_checksum = attrs.get("expected_checksum", None)
         self._restart_viam_agent = attrs.get("restart_viam_agent", True)
         
         # Compute paths
@@ -172,8 +154,8 @@ class Installer(Generic, EasyResource):
         
         # Log configuration
         LOGGER.info(f"Successfully configured {self.name}")
-        LOGGER.info(f"Description: {self._description}")
         LOGGER.info(f"Target: {self._target_version} from {self._backport_url}")
+        LOGGER.info(f"Archive: {self._archive_name}")
         LOGGER.info(f"Auto-install: {self._auto_install}, Check interval: {self._check_interval}s")
         LOGGER.info(f"Working directory: {self._backup_dir}")
 
@@ -331,8 +313,8 @@ class Installer(Generic, EasyResource):
                 "backport_files_exist": backport_files_exist,
                 "auto_install_enabled": self._auto_install,
                 "platform": self._platform,
-                "description": self._description,
                 "backport_url": self._backport_url,
+                "archive_name": self._archive_name,
                 "status": "installed" if is_backported else "needs_install"
             }
         except Exception as e:
@@ -356,8 +338,8 @@ class Installer(Generic, EasyResource):
                 }
             
             LOGGER.info(f"Starting NetworkManager backport installation for {self.name}")
-            LOGGER.info(f"Installing {self._description}")
             LOGGER.info(f"Target version: {self._target_version}")
+            LOGGER.info(f"Platform: {self._platform}")
             
             # Create backup directory
             self._backup_dir.mkdir(exist_ok=True)
@@ -372,11 +354,6 @@ class Installer(Generic, EasyResource):
             
             if download_result.returncode != 0:
                 raise Exception(f"Failed to download backport: {download_result.stderr}")
-            
-            # Verify checksum if configured
-            if self._verify_checksum and self._expected_checksum:
-                if not await self._verify_file_checksum(archive_path):
-                    raise Exception("Archive checksum verification failed")
             
             # Extract archive
             LOGGER.info("Extracting backport archive...")
@@ -430,16 +407,11 @@ class Installer(Generic, EasyResource):
 
                         if agent_restart.returncode == 0:
                             LOGGER.info(f"viam-agent restarted successfully for {self.name}")
-
-                            # Wait for viam-agent to come back online...
                             await asyncio.sleep(30)
-
                         else:
                             LOGGER.warning(f"Failed to restart viam-agent for {self.name}: {agent_restart.stderr}")
-
                     else:
                         LOGGER.info(f"viam-agent restart disabled for {self.name}")
-
                 else:
                     LOGGER.error(f"NetworkManager failed to start properly for {self.name}")
             
@@ -555,8 +527,7 @@ class Installer(Generic, EasyResource):
                 "configured": False,
                 "error": "Module not properly configured",
                 "required_attributes": [
-                    "backport_url", "target_version", "archive_name", 
-                    "work_dir", "platform", "description"
+                    "backport_url", "target_version", "work_dir", "platform"
                 ],
             }
         
@@ -567,12 +538,10 @@ class Installer(Generic, EasyResource):
             "archive_name": self._archive_name,
             "work_dir": self._work_dir,
             "platform": self._platform,
-            "description": self._description,
             "auto_install": self._auto_install,
             "check_interval": self._check_interval,
             "force_reinstall": self._force_reinstall,
             "cleanup_after_install": self._cleanup_after_install,
-            "verify_checksum": self._verify_checksum,
             "restart_viam_agent": self._restart_viam_agent,
             "backup_dir": str(self._backup_dir) if self._backup_dir else None,
             "background_task_running": self._health_check_task is not None and not self._health_check_task.done()
@@ -580,8 +549,6 @@ class Installer(Generic, EasyResource):
 
     async def _list_available_backports(self) -> Dict[str, Any]:
         """List available backports (future enhancement for discovery)."""
-        # This is a placeholder for future functionality
-        # Could query a registry or known locations for available backports
         return {
             "note": "This is a generic installer - configure with your specific backport details",
             "example_configurations": [
@@ -590,13 +557,10 @@ class Installer(Generic, EasyResource):
                     "config": {
                         "backport_url": "https://storage.googleapis.com/packages.viam.com/ubuntu/jammy-nm-backports.tar",
                         "target_version": "1.42.8",
-                        "archive_name": "jammy-nm-backports.tar",
                         "work_dir": "jammy-nm-backports",
-                        "platform": "ubuntu-22.04",
-                        "description": "NetworkManager 1.42.8 backport for Ubuntu 22.04 (Jammy)"
+                        "platform": "jetson-orin-nx-ubuntu-22.04"
                     }
                 }
-                # Future: could dynamically discover more backports
             ],
             "current_config": {
                 "configured": self._configured,
@@ -608,7 +572,6 @@ class Installer(Generic, EasyResource):
     async def _validate_archive(self) -> Dict[str, Any]:
         """Validate the configured backport archive without installing."""
         try:
-            # Create temporary directory for validation
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
                 archive_path = temp_path / self._archive_name
@@ -624,14 +587,6 @@ class Installer(Generic, EasyResource):
                         "valid": False,
                         "error": f"Failed to download: {download_result.stderr}"
                     }
-                
-                # Verify checksum if configured
-                if self._verify_checksum and self._expected_checksum:
-                    if not await self._verify_file_checksum(archive_path):
-                        return {
-                            "valid": False,
-                            "error": "Checksum verification failed"
-                        }
                 
                 # Extract and examine contents
                 extract_result = await self._run_command([
@@ -662,22 +617,6 @@ class Installer(Generic, EasyResource):
                 "valid": False,
                 "error": str(e)
             }
-
-    async def _verify_file_checksum(self, file_path: Path) -> bool:
-        """Verify file checksum if checksum verification is enabled."""
-        try:
-            # Calculate SHA256 checksum
-            result = await self._run_command(["sha256sum", str(file_path)])
-            if result.returncode != 0:
-                LOGGER.error(f"Failed to calculate checksum for {self.name}: {result.stderr}")
-                return False
-            
-            calculated_checksum = result.stdout.split()[0]
-            return calculated_checksum.lower() == self._expected_checksum.lower()
-            
-        except Exception as e:
-            LOGGER.error(f"Checksum verification failed for {self.name}: {e}")
-            return False
 
     async def _run_command(self, cmd: List[str], cwd: Optional[str] = None) -> subprocess.CompletedProcess:
         """Run a shell command asynchronously."""
