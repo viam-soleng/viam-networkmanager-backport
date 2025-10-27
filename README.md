@@ -2,7 +2,7 @@
 
 A Viam module for installing NetworkManager backports across device fleets.
 
-## Model hunter:networkmanager-backport:installer
+## Model viam-soleng:networkmanager-backport:installer
 
 The installer component handles downloading, extracting, and installing NetworkManager backport packages from configurable sources.
 
