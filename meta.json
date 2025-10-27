@@ -9,7 +9,7 @@
       "api": "rdk:component:generic",
       "model": "viam-soleng:networkmanager-backport:installer",
       "short_description": "Generic NetworkManager backport installer",
-      "markdown_link": "README.md#model-viamsolengnetworkmanager-backportinstaller"
+      "markdown_link": "README.md#model-viam-solengnetworkmanager-backportinstaller"
     }
   ],
   "applications": null,
