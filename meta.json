@@ -2,7 +2,7 @@
   "$schema": "https://dl.viam.dev/module.schema.json",
   "module_id": "hunter:networkmanager-backport",
   "visibility": "public",
-  "url": "https://github.com/hunter-volkman/networkmanager-backport",
+  "url": "https://github.com/viam-soleng/viam-networkmanager-backport",
   "description": "Generic NetworkManager backport installer",
   "models": [
     {
