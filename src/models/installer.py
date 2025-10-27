@@ -27,7 +27,7 @@ class Installer(Generic, EasyResource):
     """
     
     MODEL: ClassVar[Model] = Model(
-        ModelFamily("hunter", "networkmanager-backport"), 
+        ModelFamily("viam-soleng", "networkmanager-backport"), 
         "installer"
     )
     
