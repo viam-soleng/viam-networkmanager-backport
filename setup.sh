@@ -32,10 +32,31 @@ fi
 # remove -U if viam-sdk should not be upgraded whenever possible
 # -qq suppresses extraneous output from pip
 echo "Virtualenv found/created. Installing/upgrading Python packages..."
-if ! [ -f .installed ]; then
+
+# .installed holds a copy of the requirements.txt the venv was built from, so a
+# changed requirements.txt triggers a reinstall. The import check catches a venv
+# that was marked installed but is corrupt (e.g. truncated files after a power
+# loss or full disk), which would otherwise crash-loop the module forever.
+venv_ok() {
+    cmp -s requirements.txt .installed &&
+        $PYTHON -c "from viam.module.module import Module" >/dev/null 2>&1
+}
+
+if ! venv_ok; then
+    if [ -f .installed ]; then
+        echo "Virtualenv is stale or broken, rebuilding..."
+        rm -rf $VENV_NAME .installed
+        if ! python3 -m venv $VENV_NAME >/dev/null 2>&1; then
+            echo $ENV_ERROR >&2
+            exit 1
+        fi
+    fi
     if ! $PYTHON -m pip install -r requirements.txt -Uqq; then
         exit 1
-    else
-        touch .installed
     fi
+    if ! $PYTHON -c "from viam.module.module import Module"; then
+        echo "viam-sdk is still not importable after install." >&2
+        exit 1
+    fi
+    cp requirements.txt .installed
 fi
