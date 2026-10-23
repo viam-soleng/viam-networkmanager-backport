@@ -2,6 +2,10 @@
 
 A Viam module for installing NetworkManager backports across device fleets.
 
+## Why this module exists
+
+The GOST mobile app (`gost-mobile-app`) provisions Specter AI devices over a WiFi hotspot. When a device has no known network, viam-agent starts a `gost`-prefixed hotspot. The phone joins it, the app asks the device for the WiFi networks it can see, and the user picks one and enters the password. This only works if the device can scan for networks while its hotspot is running. Jetsons on Ubuntu 22.04 ship NetworkManager 1.36.x (1.36.4 at release, 1.36.6 in jammy-updates), and on those devices scanning in hotspot mode fails. After three failed scans, viam-agent turns off scanning while in hotspot mode ("Device hardware/software does not appear to support wifi scanning while hotspot is active"). The app then shows an empty network list, and provisioning is not likely to succeed. To fix this, the agent team built NetworkManager 1.42.8 for Jammy arm64 (`jammy-nm-backports.tar`, May 2025). This module installs that build on the preload. It checks the installed NetworkManager version, installs the 1.42.8 packages if needed, restarts NetworkManager, and restarts viam-agent so the networking subsystem picks up the new NetworkManager. Note that viam-agent itself only requires NetworkManager 1.30 or newer. The 1.42.8 backport is what the GOST app's hotspot provisioning flow needs.
+
 ## Model viam-soleng:networkmanager-backport:installer
 
 The installer component handles downloading, extracting, and installing NetworkManager backport packages from configurable sources.
