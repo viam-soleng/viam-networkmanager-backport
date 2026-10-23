@@ -14,6 +14,13 @@
   ],
   "applications": null,
   "markdown_link": "README.md",
+  "build": {
+    "build": "make module.tar.gz",
+    "path": "module.tar.gz",
+    "arch": [
+      "linux/arm64"
+    ]
+  },
   "entrypoint": "./run.sh",
   "first_run": ""
 }
